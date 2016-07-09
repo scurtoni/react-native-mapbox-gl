@@ -3,21 +3,21 @@ package com.mapbox.reactnativemapboxgl;
 
 import android.content.Context;
 import android.util.Log;
-import java.util.HashMap;
-import java.util.Map;
 
-import com.mapbox.mapboxsdk.constants.Style;
 import com.facebook.react.bridge.Arguments;
+import com.facebook.react.bridge.Callback;
 import com.facebook.react.bridge.ReactApplicationContext;
 import com.facebook.react.bridge.ReactContextBaseJavaModule;
 import com.facebook.react.bridge.ReactMethod;
 import com.facebook.react.bridge.ReadableArray;
-import com.facebook.react.bridge.ReadableMap;
-import com.facebook.react.bridge.Callback;
 import com.facebook.react.bridge.WritableMap;
 import com.mapbox.mapboxsdk.constants.MyLocationTracking;
-import com.mapbox.mapboxsdk.geometry.LatLng;
-import com.mapbox.mapboxsdk.views.MapView;
+import com.mapbox.mapboxsdk.constants.Style;
+import com.facebook.react.bridge.ReadableMap;
+import com.facebook.react.bridge.WritableMap;
+
+import java.util.HashMap;
+import java.util.Map;
 
 import javax.annotation.Nullable;
 
@@ -64,6 +64,79 @@ public class ReactNativeMapboxGLModule extends ReactContextBaseJavaModule {
 
         return constants;
     }
+
+    @ReactMethod
+    public void addPackForRegion(int mapRef, ReadableMap options) {
+
+        ReadableMap bounds = options.getMap("bounds");
+
+    /*    if(bounds == null){
+            Log.d(TAG, "bounds could not be null");
+        }
+
+        if(options.getString("name") == null){
+            Log.d(TAG, "name could not be null");
+        }
+
+        if(options.getInt("minZoomLevel") == null){
+            Log.d(TAG, "minZoomLevel could not be null");
+        }
+
+        if(options.getInt("maxZoomLevel") == null){
+            Log.d(TAG, "maxZoomLevel could not be null");
+        }
+
+        if(options.getString("styleURL") == null){
+            Log.d(TAG, "styleURL could not be null");
+        }
+
+        if(options.getString("metadata") == null){
+            Log.d(TAG, "metadata could not be null");
+        }
+
+        if(options.getString("bbox") == null){
+            Log.d(TAG, "bbox could not be null");
+        }
+*/
+        Log.d(TAG, "Name: " + options.getString("name"));
+        Log.d(TAG, "minZoomLevel: " + options.getInt("minZoomLevel"));
+        Log.d(TAG, "maxZoomLevel: " + options.getInt("maxZoomLevel"));
+        Log.d(TAG, "styleURL: " + options.getString("styleURL"));
+        Log.d(TAG, "metadata: " + options.getString("metadata"));
+        Log.d(TAG, "bbox: " + options.getString("bbox"));
+
+/*
+        // Create a bounding box for the offline region
+        LatLngBounds latLngBounds = new LatLngBounds.Builder()
+                .include(new LatLng(37.7897, -119.5073)) // Northeast
+                .include(new LatLng(37.6744, -119.6815)) // Southwest
+                .build();
+
+        // Define the offline region
+        OfflineTilePyramidRegionDefinition definition = new OfflineTilePyramidRegionDefinition(
+                mapView.getStyleUrl(),
+                latLngBounds,
+                10,
+                20,
+                this.getResources().getDisplayMetrics().density);
+
+        offlineManager.createOfflineRegion(definition, metadata, new OfflineManager.CreateOfflineRegionCallback() {
+            ....
+        }*/
+
+
+    }
+
+    @ReactMethod
+    public void getPacks(int mapRef, Callback callback) {
+
+    }
+
+    @ReactMethod
+    public void removePack(int mapRef, String packName, Callback callback) {
+
+    }
+
 
     @ReactMethod
     public void setDirectionAnimated(int mapRef, int direction) {
@@ -132,14 +205,16 @@ public class ReactNativeMapboxGLModule extends ReactContextBaseJavaModule {
         WritableMap location = aPackage.getManager().getCenterCoordinateZoomLevel(aPackage.getManager().getMapView());
         successCallback.invoke(location);
     }
-
+/*
     @ReactMethod
     public void getBounds(int mapRef, Callback successCallback) {
-      WritableMap bounds = aPackage.getManager().getBounds(aPackage.getManager().getMapView());
-      successCallback.invoke(bounds);
+        WritableMap bounds = aPackage.getManager().getBounds(aPackage.getManager().getMapView());
+        successCallback.invoke(bounds);
     }
-
+*/
     public void setPackage(ReactNativeMapboxGLPackage aPackage) {
         this.aPackage = aPackage;
     }
+
+
 }
