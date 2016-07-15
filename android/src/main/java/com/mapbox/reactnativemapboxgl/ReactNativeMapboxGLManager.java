@@ -1,4 +1,3 @@
-
 package com.mapbox.reactnativemapboxgl;
 
 import android.graphics.Bitmap;
@@ -10,6 +9,13 @@ import android.location.Location;
 import android.os.StrictMode;
 import android.support.annotation.NonNull;
 import android.util.Log;
+
+import android.widget.Toast;
+import android.content.Context;
+import com.mapbox.mapboxsdk.MapboxAccountManager;
+
+import com.mapbox.mapboxsdk.constants.Style;
+
 
 import com.facebook.react.bridge.Arguments;
 import com.facebook.react.bridge.ReactContext;
@@ -70,60 +76,104 @@ public class ReactNativeMapboxGLManager extends SimpleViewManager<MapView> {
     private UiSettings uiSettings;
     private TrackingSettings trackingSettings;
 
+    private ThemedReactContext ctx;
+
     private MapSettings mapSettings;
 
+    private static String APPLICATION_ID;
+
+    private static final String TAG = ReactNativeMapboxGLManager.class.getSimpleName();
 
     @Override
     public String getName() {
         return REACT_CLASS;
     }
 
+
     @Override
     public MapView createViewInstance(ThemedReactContext context) {
+
+        Toast.makeText(context, "[MapManager] createViewInstance ", Toast.LENGTH_SHORT).show();
+
+        ctx = context;
+
+        MapboxAccountManager.start(context, "pk.eyJ1Ijoic3RlZmFub2N1cnRvbmkiLCJhIjoiY2lvYjYzbzNpMDAyZ3V3bTFuMHhsczN0YiJ9.Tti4Ef0EwjxGzbevlIt2yw");
+
         mapView = new MapView(context);
-        mapView.setAccessToken("pk.foo");
         mapView.onCreate(null);
+
+        //resume activity
+        mapView.onResume();
+
         StrictMode.ThreadPolicy policy = new StrictMode.ThreadPolicy.Builder().permitAll().build();
         StrictMode.setThreadPolicy(policy);
 
         //init map setting bean
         mapSettings = new MapSettings();
 
+        mapView.getMapAsync(new OnMapReadyCallback() {
+            @Override
+            public void onMapReady(@NonNull MapboxMap m) {
+
+                Toast.makeText(ctx, "[MapManager] map ready: ", Toast.LENGTH_SHORT).show();
+
+                mapboxMap = m;
+
+                uiSettings = m.getUiSettings();
+                trackingSettings = m.getTrackingSettings();
+
+                m.setStyleUrl(Style.MAPBOX_STREETS);
+
+            }
+        });
+
         return mapView;
     }
 
+/*
     public void onMapReady(final MapView view, Boolean value) {
-        view.getMapAsync(new OnMapReadyCallback() {
+
+        Toast.makeText(ctx, "[MapManager] map ready ", Toast.LENGTH_SHORT).show();
+
+        mapView.getMapAsync(new OnMapReadyCallback() {
             @Override
             public void onMapReady(@NonNull MapboxMap m) {
+
+                Toast.makeText(ctx, "[MapManager] map ready: ", Toast.LENGTH_SHORT).show();
+
+                mapboxMap = m;
+
                 uiSettings = mapboxMap.getUiSettings();
                 trackingSettings = mapboxMap.getTrackingSettings();
-                mapboxMap = m;
+
+                mapboxMap.setStyleUrl(Style.MAPBOX_STREETS);
 
             }
         });
     }
-
+*/
 
     @ReactProp(name = PROP_ACCESS_TOKEN)
     public void setAccessToken(MapView view, @Nullable String value) {
-
+/*
         mapSettings.setAccessToken(value);
 
         view.getMapAsync(new OnMapReadyCallback() {
             @Override
             public void onMapReady(@NonNull MapboxMap m) {
 
-                String accessToken = mapSettings.getAccessToken();
+                String  accessToken = mapSettings.getAccessToken();
+
+                Toast.makeText(ctx, "[MapManager] set token: " + accessToken, Toast.LENGTH_SHORT).show();
 
                 if (accessToken == null || accessToken.isEmpty()) {
                     Log.e(REACT_CLASS, "Error: No access token provided");
                 } else {
-                    mapboxMap.setAccessToken(accessToken);
+                    mapView.setAccessToken(accessToken);
                 }
             }
         });
-
+*/
     }
 
     @ReactProp(name = PROP_SET_TILT)
@@ -288,7 +338,7 @@ public class ReactNativeMapboxGLManager extends SimpleViewManager<MapView> {
         );
 
     }
-
+/*
     @ReactProp(name = PROP_ONREGIONCHANGE, defaultBoolean = true)
     public void onMapChanged(final MapView view, Boolean value) {
         view.addOnMapChangedListener(new MapView.OnMapChangedListener() {
@@ -370,11 +420,10 @@ public class ReactNativeMapboxGLManager extends SimpleViewManager<MapView> {
                         .emit("onLongPress", event);
             }
         });
-    }
+    }*/
 
     @ReactProp(name = PROP_CENTER_COORDINATE)
     public void setCenterCoordinate(MapView view, @Nullable ReadableMap center) {
-
 
         if (center != null) {
 
@@ -386,12 +435,14 @@ public class ReactNativeMapboxGLManager extends SimpleViewManager<MapView> {
 
                     ReadableMap center = mapSettings.getCenter();
 
+                    Toast.makeText(ctx, "[MapManager] set center: " + center.getDouble("latitude") + "," + center.getDouble("longitude"), Toast.LENGTH_SHORT).show();
+
                     double latitude = center.getDouble("latitude");
                     double longitude = center.getDouble("longitude");
                     CameraPosition cameraPosition = new CameraPosition.Builder()
                             .target(new LatLng(latitude, longitude))
                             .build();
-                    mapboxMap.moveCamera(CameraUpdateFactory.newCameraPosition(cameraPosition));
+                    m.moveCamera(CameraUpdateFactory.newCameraPosition(cameraPosition));
                 }
             });
 
@@ -412,7 +463,7 @@ public class ReactNativeMapboxGLManager extends SimpleViewManager<MapView> {
 
                 boolean routeEnabled = mapSettings.isRotateEnabled();
 
-                uiSettings.setRotateGesturesEnabled(routeEnabled);
+                mapboxMap.getUiSettings().setRotateGesturesEnabled(routeEnabled);
             }
         });
     }
@@ -436,11 +487,25 @@ public class ReactNativeMapboxGLManager extends SimpleViewManager<MapView> {
 
     @ReactProp(name = PROP_STYLE_URL)
     public void setStyleUrl(MapView view, @Nullable String value) {
+
+        mapSettings.setStyleURL(value);
+
         if (value != null && !value.isEmpty()) {
-            view.setStyleUrl(value);
+
+
+            view.getMapAsync(new OnMapReadyCallback() {
+                @Override
+                public void onMapReady(@NonNull MapboxMap m) {
+
+                    //view.setStyleUrl(mapSettings.getStyleURL());
+                    mapboxMap.setStyleUrl(mapSettings.getStyleURL());
+                }
+            });
+
         }else{
             Log.w(REACT_CLASS, "No StyleUrl provided");
         }
+
     }
 
     @ReactProp(name = PROP_USER_TRACKING_MODE, defaultInt = 0)
@@ -455,7 +520,7 @@ public class ReactNativeMapboxGLManager extends SimpleViewManager<MapView> {
 
                 int mode = mapSettings.getTrackingMode();
 
-                trackingSettings.setMyLocationTrackingMode(mode);
+                mapboxMap.getTrackingSettings().setMyLocationTrackingMode(mode);
             }
         });
 
@@ -470,7 +535,7 @@ public class ReactNativeMapboxGLManager extends SimpleViewManager<MapView> {
             @Override
             public void onMapReady(@NonNull MapboxMap m) {
 
-                uiSettings.setZoomControlsEnabled(mapSettings.getZoomEnabled());
+                mapboxMap.getUiSettings().setZoomControlsEnabled(mapSettings.getZoomEnabled());
             }
         });
 
@@ -484,6 +549,9 @@ public class ReactNativeMapboxGLManager extends SimpleViewManager<MapView> {
         view.getMapAsync(new OnMapReadyCallback() {
             @Override
             public void onMapReady(@NonNull MapboxMap m) {
+
+
+                Toast.makeText(ctx, "[MapManager] set zoomLevel: " + mapSettings.getZoomLevel(), Toast.LENGTH_SHORT).show();
 
                 mapboxMap.moveCamera(CameraUpdateFactory.newCameraPosition(
                         new CameraPosition.Builder()
@@ -502,7 +570,7 @@ public class ReactNativeMapboxGLManager extends SimpleViewManager<MapView> {
         view.getMapAsync(new OnMapReadyCallback() {
             @Override
             public void onMapReady(@NonNull MapboxMap m) {
-                uiSettings.setScrollGesturesEnabled(mapSettings.isScrollEnabled());
+                mapboxMap.getUiSettings().setScrollGesturesEnabled(mapSettings.isScrollEnabled());
             }
         });
 
@@ -520,7 +588,7 @@ public class ReactNativeMapboxGLManager extends SimpleViewManager<MapView> {
             @Override
             public void onMapReady(@NonNull MapboxMap m) {
 
-                uiSettings.setCompassEnabled(mapSettings.getIsCompassHidden());
+                mapboxMap.getUiSettings().setCompassEnabled(mapSettings.getIsCompassHidden());
 
             }
         });
@@ -542,15 +610,30 @@ public class ReactNativeMapboxGLManager extends SimpleViewManager<MapView> {
     */
 
     public void setCenterCoordinateZoomLevel(MapView view, @Nullable ReadableMap center) {
+
+
         if (center != null) {
-            double latitude = center.getDouble("latitude");
-            double longitude = center.getDouble("longitude");
-            float zoom = (float)center.getDouble("zoom");
-            CameraPosition cameraPosition = new CameraPosition.Builder()
-                    .target(new LatLng(latitude, longitude))
-                    .zoom(zoom)
-                    .build();
-            mapboxMap.moveCamera(CameraUpdateFactory.newCameraPosition(cameraPosition));
+
+            mapSettings.setCenter(center);
+
+            view.getMapAsync(new OnMapReadyCallback() {
+                @Override
+                public void onMapReady(@NonNull MapboxMap m) {
+
+                    ReadableMap center = mapSettings.getCenter();
+
+                    double latitude = center.getDouble("latitude");
+                    double longitude = center.getDouble("longitude");
+                    float zoom = (float)center.getDouble("zoom");
+                    CameraPosition cameraPosition = new CameraPosition.Builder()
+                            .target(new LatLng(latitude, longitude))
+                            .zoom(zoom)
+                            .build();
+                    mapboxMap.moveCamera(CameraUpdateFactory.newCameraPosition(cameraPosition));
+
+                }
+            });
+
         }else{
             Log.w(REACT_CLASS, "No CenterCoordinate provided");
         }
