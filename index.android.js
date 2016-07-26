@@ -7,9 +7,8 @@ var { NativeModules, requireNativeComponent, findNodeHandle } = ReactNative;
 var { MapboxGLManager } = NativeModules;
 
 var MapMixins = {
-
-  addPackForRegion(mapRef, options) {
-    MapboxGLManager.addPackForRegion(findNodeHandle(this.refs[mapRef]), options);
+  addPackForRegion(mapRef, options, progressCallback) {
+    MapboxGLManager.addPackForRegion(findNodeHandle(this.refs[mapRef]), options, progressCallback);
   },
   getPacks(mapRef, callback) {
     MapboxGLManager.getPacks(findNodeHandle(this.refs[mapRef]), callback);
@@ -17,7 +16,6 @@ var MapMixins = {
   removePack(mapRef, packName, callback) {
     MapboxGLManager.removePack(findNodeHandle(this.refs[mapRef]), packName, callback);
   },
-
   setDirectionAnimated(mapRef, heading) {
     MapboxGLManager.setDirectionAnimated(findNodeHandle(this.refs[mapRef]), heading);
   },

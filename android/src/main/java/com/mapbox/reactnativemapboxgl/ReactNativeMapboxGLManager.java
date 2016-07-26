@@ -12,9 +12,17 @@ import android.util.Log;
 
 import android.widget.Toast;
 import android.content.Context;
-import com.mapbox.mapboxsdk.MapboxAccountManager;
 
+import com.mapbox.mapboxsdk.MapboxAccountManager;
 import com.mapbox.mapboxsdk.constants.Style;
+import com.mapbox.mapboxsdk.geometry.LatLng;
+import com.mapbox.mapboxsdk.geometry.LatLngBounds;
+import com.mapbox.mapboxsdk.offline.OfflineManager;
+import com.mapbox.mapboxsdk.offline.OfflineRegion;
+import com.mapbox.mapboxsdk.offline.OfflineRegionError;
+import com.mapbox.mapboxsdk.offline.OfflineRegionStatus;
+import com.mapbox.mapboxsdk.offline.OfflineTilePyramidRegionDefinition;
+import com.mapbox.mapboxsdk.offline.OfflineRegion;
 
 
 import com.facebook.react.bridge.Arguments;
@@ -22,6 +30,7 @@ import com.facebook.react.bridge.ReactContext;
 import com.facebook.react.bridge.ReadableArray;
 import com.facebook.react.bridge.ReadableMap;
 import com.facebook.react.bridge.WritableMap;
+import com.facebook.react.bridge.Callback;
 import com.facebook.react.modules.core.DeviceEventManagerModule;
 import com.facebook.react.uimanager.SimpleViewManager;
 import com.facebook.react.uimanager.ThemedReactContext;
@@ -44,8 +53,13 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.net.HttpURLConnection;
 import java.net.URL;
-
 import javax.annotation.Nullable;
+
+import org.json.JSONObject;
+
+import java.util.HashMap;
+import java.util.Map;
+
 
 public class ReactNativeMapboxGLManager extends SimpleViewManager<MapView> {
 
@@ -71,6 +85,10 @@ public class ReactNativeMapboxGLManager extends SimpleViewManager<MapView> {
     public static final String PROP_COMPASS_IS_HIDDEN = "compassIsHidden";
     public static final String PROP_LOGO_IS_HIDDEN = "logoIsHidden";
     public static final String PROP_ATTRIBUTION_BUTTON_IS_HIDDEN = "attributionButtonIsHidden";
+    public static final String PROP_ADD_PACK = "addPackForRegion";
+    //public static final String PROP_GET_PACKS = "getPacks";
+    //public static final String PROP_REMOVE_PACK = "removePack";
+
     private MapView mapView;
     private MapboxMap mapboxMap;
     private UiSettings uiSettings;
@@ -80,9 +98,18 @@ public class ReactNativeMapboxGLManager extends SimpleViewManager<MapView> {
 
     private MapSettings mapSettings;
 
+    private OfflineManager offlineManager;
+
+    private Map<String,OfflineRegion> offlineRegionMap;
+
     private static String APPLICATION_ID;
 
     private static final String TAG = ReactNativeMapboxGLManager.class.getSimpleName();
+
+    // JSON encoding/decoding
+    public final static String JSON_CHARSET = "UTF-8";
+    public final static String JSON_FIELD_REGION_NAME = "FIELD_REGION_NAME";
+    public final static String JSON_FIELD_REGION_UUID = "uuid";
 
     @Override
     public String getName() {
@@ -111,6 +138,14 @@ public class ReactNativeMapboxGLManager extends SimpleViewManager<MapView> {
         //init map setting bean
         mapSettings = new MapSettings();
 
+        // Set up the OfflineManager
+        offlineRegionMap = new HashMap<String,OfflineRegion>();
+
+        offlineManager = OfflineManager.getInstance(ctx);
+
+        //load all map packs
+        getPacks(mapView);
+
         mapView.getMapAsync(new OnMapReadyCallback() {
             @Override
             public void onMapReady(@NonNull MapboxMap m) {
@@ -122,7 +157,7 @@ public class ReactNativeMapboxGLManager extends SimpleViewManager<MapView> {
                 uiSettings = m.getUiSettings();
                 trackingSettings = m.getTrackingSettings();
 
-                //m.setStyleUrl(Style.MAPBOX_STREETS);
+                mapboxMap.setStyleUrl(Style.MAPBOX_STREETS);
 
                 /*
                 CameraPosition cameraPosition = new CameraPosition.Builder()
@@ -161,6 +196,170 @@ public class ReactNativeMapboxGLManager extends SimpleViewManager<MapView> {
     }
 */
 
+    public void addPackForRegion(MapView view, ReadableMap options, Callback progressCallback) {
+
+        // Create a bounding box for the offline region
+        LatLngBounds latLngBounds = new LatLngBounds.Builder()
+                .include(new LatLng(options.getArray("boundary").getMap(0).getDouble("latitude"), options.getArray("boundary").getMap(0).getDouble("longitude"))) // Northeast
+                .include(new LatLng(options.getArray("boundary").getMap(1).getDouble("latitude"), options.getArray("boundary").getMap(1).getDouble("longitude"))) // Southwest
+                .build();
+
+        // Define the offline region
+        OfflineTilePyramidRegionDefinition definition = new OfflineTilePyramidRegionDefinition(
+                Style.MAPBOX_STREETS,
+                latLngBounds,
+                options.getInt("minZoomLevel"),
+                options.getInt("maxZoomLevel"),
+                1);
+
+        // Set the metadata
+        byte[] metadata;
+        try {
+            JSONObject jsonObject = new JSONObject();
+            jsonObject.put(JSON_FIELD_REGION_NAME, options.getMap("metadata").getString("name"));
+            jsonObject.put(JSON_FIELD_REGION_UUID, options.getMap("metadata").getString("uuid"));
+            String json = jsonObject.toString();
+            metadata = json.getBytes(JSON_CHARSET);
+        } catch (Exception e) {
+            Log.e(TAG, "Failed to encode metadata: " + e.getMessage());
+            metadata = null;
+        }
+
+
+        // Create the region asynchronously
+        offlineManager.createOfflineRegion(definition, metadata, new OfflineManager.CreateOfflineRegionCallback() {
+            @Override
+            public void onCreate(OfflineRegion offlineRegion) {
+                offlineRegion.setDownloadState(OfflineRegion.STATE_ACTIVE);
+
+                // Monitor the download progress using setObserver
+                offlineRegion.setObserver(new OfflineRegion.OfflineRegionObserver() {
+                    @Override
+                    public void onStatusChanged(OfflineRegionStatus status) {
+
+                        // Calculate the download percentage and update the progress bar
+                        double percentage = status.getRequiredResourceCount() >= 0 ?
+                                (100.0 * status.getCompletedResourceCount() / status.getRequiredResourceCount()) :
+                                0.0;
+
+                        //progressCallback.invoke(percentage);
+
+                        if (status.isComplete()) {
+                            // Download complete
+                            Toast.makeText(ctx, "Region downloaded successfully.", Toast.LENGTH_SHORT).show();
+
+                        } else if (status.isRequiredResourceCountPrecise()) {
+
+                            Toast.makeText(ctx, "Region perc downloaded : " + percentage, Toast.LENGTH_SHORT).show();
+
+                            // Switch to determinate state
+                            //setPercentage((int) Math.round(percentage));
+                        }
+                    }
+
+                    @Override
+                    public void onError(OfflineRegionError error) {
+                        // If an error occurs, print to logcat
+                        Log.e(TAG, "onError reason: " + error.getReason());
+                        Log.e(TAG, "onError message: " + error.getMessage());
+                    }
+
+                    @Override
+                    public void mapboxTileCountLimitExceeded(long limit) {
+                        // Notify if offline region exceeds maximum tile count
+                        Log.e(TAG, "Mapbox tile count limit exceeded: " + limit);
+                    }
+                });
+            }
+
+            @Override
+            public void onError(String error) {
+                Log.e(TAG, "Error: " + error);
+            }
+        });
+
+
+    }
+
+    public void getPacks(MapView view) {
+        Toast.makeText(ctx, "[MapManager] getPacks ", Toast.LENGTH_SHORT).show();
+
+        offlineManager.listOfflineRegions(new OfflineManager.ListOfflineRegionsCallback() {
+            @Override
+            public void onList(final OfflineRegion[] offlineRegions) {
+
+                offlineRegionMap.clear();
+
+                for (OfflineRegion offlineRegion : offlineRegions) {
+                    Toast.makeText(ctx, "[MapManager] pack name " + getRegionName(offlineRegion), Toast.LENGTH_SHORT).show();
+                    offlineRegionMap.put(getRegionUuid(offlineRegion), offlineRegion);
+                }
+            }
+
+            @Override
+            public void onError(String error) {
+                Log.e(TAG, "Error: " + error);
+            }
+
+        });
+
+    }
+
+    public void removePack(MapView view, String packUuid) {
+        Toast.makeText(ctx, "[MapManager] removePack " + packUuid, Toast.LENGTH_SHORT).show();
+
+        // Begin the deletion process
+
+        offlineRegionMap.get(packUuid).delete(new OfflineRegion.OfflineRegionDeleteCallback() {
+            @Override
+            public void onDelete() {
+                // Once the region is deleted, remove the
+                // progressBar and display a toast
+                Toast.makeText(ctx, "Region deleted", Toast.LENGTH_LONG).show();
+            }
+
+            @Override
+            public void onError(String error) {
+
+                Log.e(TAG, "Error: " + error);
+            }
+        });
+
+    }
+
+    private String getRegionName(OfflineRegion offlineRegion) {
+        // Get the retion name from the offline region metadata
+        String regionName;
+
+        try {
+            byte[] metadata = offlineRegion.getMetadata();
+            String json = new String(metadata, JSON_CHARSET);
+            JSONObject jsonObject = new JSONObject(json);
+            regionName = jsonObject.getString(JSON_FIELD_REGION_NAME);
+        } catch (Exception e) {
+            Log.e(TAG, "Failed to decode metadata: " + e.getMessage());
+            regionName = "Region " + offlineRegion.getID();
+        }
+        return regionName;
+    }
+
+    private String getRegionUuid(OfflineRegion offlineRegion) {
+        // Get the retion name from the offline region metadata
+        String regionName;
+
+        try {
+            byte[] metadata = offlineRegion.getMetadata();
+            String json = new String(metadata, JSON_CHARSET);
+            JSONObject jsonObject = new JSONObject(json);
+            regionName = jsonObject.getString(JSON_FIELD_REGION_UUID);
+        } catch (Exception e) {
+            Log.e(TAG, "Failed to decode metadata: " + e.getMessage());
+            regionName = "Region " + offlineRegion.getID();
+        }
+        return regionName;
+    }
+
+
     @ReactProp(name = PROP_ACCESS_TOKEN)
     public void setAccessToken(MapView view, @Nullable String value) {
 /*
@@ -188,19 +387,31 @@ public class ReactNativeMapboxGLManager extends SimpleViewManager<MapView> {
     public void setTilt(MapView view, @Nullable double pitch) {
 
         mapSettings.setPitch(pitch);
-/*
+
         Toast.makeText(ctx, "[MapManager] set tilt: " + pitch, Toast.LENGTH_SHORT).show();
 
         mapView.getMapAsync(new OnMapReadyCallback() {
             @Override
             public void onMapReady(@NonNull MapboxMap m) {
 
+                Toast.makeText(ctx, "[MapManager] set tilt to: " + mapSettings.getPitch(), Toast.LENGTH_SHORT).show();
+
                 mapboxMap.moveCamera(CameraUpdateFactory.newCameraPosition(
                         new CameraPosition.Builder()
                                 .tilt(mapSettings.getPitch())
                                 .build()));
             }
-        });*/
+        });
+    }
+
+    public void setTiltFn(MapboxMap map, @Nullable double pitch) {
+
+        Toast.makeText(ctx, "[MapManager] set tilt fn: " + pitch, Toast.LENGTH_SHORT).show();
+
+        map.moveCamera(CameraUpdateFactory.newCameraPosition(
+                new CameraPosition.Builder()
+                        .tilt(pitch)
+                        .build()));
     }
 
     public static Drawable drawableFromUrl(MapView view, String url) throws IOException {
@@ -216,18 +427,21 @@ public class ReactNativeMapboxGLManager extends SimpleViewManager<MapView> {
 
     @ReactProp(name = PROP_ANNOTATIONS)
     public void setAnnotationClear(MapView view, @Nullable ReadableArray value) {
-       // setAnnotations(view, value, true);
+        setAnnotations(view, value, true);
     }
 
 
     public void setAnnotations(MapView view, @Nullable ReadableArray value, boolean clearMap) {
+
+        Toast.makeText(ctx, "[MapManager] add annotations ", Toast.LENGTH_SHORT).show();
+
         if (value == null || value.size() < 1) {
             Log.e(REACT_CLASS, "Error: No annotations");
         } else {
 
             mapSettings.setAnnotations(value);
 
-            view.getMapAsync(new OnMapReadyCallback() {
+            mapView.getMapAsync(new OnMapReadyCallback() {
                 @Override
                 public void onMapReady(@NonNull MapboxMap m) {
 
@@ -235,15 +449,20 @@ public class ReactNativeMapboxGLManager extends SimpleViewManager<MapView> {
 
 
                     //   if (clearMap) {
-                    mapboxMap.removeAnnotations();
+                    //mapboxMap.removeAnnotations();
                     //   }
+
+
                     int size = annotations.size();
                     for (int i = 0; i < size; i++) {
                         ReadableMap annotation = annotations.getMap(i);
                         String type = annotation.getString("type");
+
+                        Log.w(REACT_CLASS, "[MapxView] annotation type: " + type);
+
                         if (type.equals("point")) {
-                            double latitude = annotation.getArray("coordinates").getDouble(0);
-                            double longitude = annotation.getArray("coordinates").getDouble(1);
+                            double latitude = annotation.getMap("coordinates").getDouble("lat");
+                            double longitude = annotation.getMap("coordinates").getDouble("lon");
                             LatLng markerCenter = new LatLng(latitude, longitude);
                             MarkerOptions marker = new MarkerOptions();
                             marker.position(markerCenter);
@@ -272,8 +491,8 @@ public class ReactNativeMapboxGLManager extends SimpleViewManager<MapView> {
                             int coordSize = annotation.getArray("coordinates").size();
                             PolylineOptions polyline = new PolylineOptions();
                             for (int p = 0; p < coordSize; p++) {
-                                double latitude = annotation.getArray("coordinates").getArray(p).getDouble(0);
-                                double longitude = annotation.getArray("coordinates").getArray(p).getDouble(1);
+                                Double latitude = annotation.getArray("coordinates").getMap(p).getDouble("lat");
+                                Double longitude = annotation.getArray("coordinates").getMap(p).getDouble("lon");
                                 polyline.add(new LatLng(latitude, longitude));
                             }
                             if (annotation.hasKey("alpha")) {
@@ -289,7 +508,7 @@ public class ReactNativeMapboxGLManager extends SimpleViewManager<MapView> {
                                 polyline.width(strokeWidth);
                             }
                             mapboxMap.addPolyline(polyline);
-                        } else if (type.equals("polygon")) {
+                        } /*else if (type.equals("polygon")) {
                             int coordSize = annotation.getArray("coordinates").size();
                             PolygonOptions polygon = new PolygonOptions();
                             for (int p = 0; p < coordSize; p++) {
@@ -310,7 +529,7 @@ public class ReactNativeMapboxGLManager extends SimpleViewManager<MapView> {
                                 polygon.strokeColor(strokeColor);
                             }
                             mapboxMap.addPolygon(polygon);
-                        }
+                        }*/
                     }
 
                 }
@@ -508,7 +727,7 @@ public class ReactNativeMapboxGLManager extends SimpleViewManager<MapView> {
     public void setMyLocationEnabled(MapView view, Boolean value) {
 /*
         mapSettings.setMyLocationEnabled(value);
-
+re
         view.getMapAsync(new OnMapReadyCallback() {
             @Override
             public void onMapReady(@NonNull MapboxMap m) {
@@ -722,6 +941,10 @@ public class ReactNativeMapboxGLManager extends SimpleViewManager<MapView> {
     */
     public MapView getMapView() {
         return mapView;
+    }
+
+    public MapboxMap getMapboxMap() {
+        return mapboxMap;
     }
 
 

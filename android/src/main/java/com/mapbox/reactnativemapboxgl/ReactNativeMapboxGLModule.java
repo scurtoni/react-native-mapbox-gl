@@ -66,75 +66,20 @@ public class ReactNativeMapboxGLModule extends ReactContextBaseJavaModule {
     }
 
     @ReactMethod
-    public void addPackForRegion(int mapRef, ReadableMap options) {
+    public void addPackForRegion(int mapRef, ReadableMap options, Callback progressCallback) {
 
-        ReadableMap bounds = options.getMap("bounds");
-
-    /*    if(bounds == null){
-            Log.d(TAG, "bounds could not be null");
-        }
-
-        if(options.getString("name") == null){
-            Log.d(TAG, "name could not be null");
-        }
-
-        if(options.getInt("minZoomLevel") == null){
-            Log.d(TAG, "minZoomLevel could not be null");
-        }
-
-        if(options.getInt("maxZoomLevel") == null){
-            Log.d(TAG, "maxZoomLevel could not be null");
-        }
-
-        if(options.getString("styleURL") == null){
-            Log.d(TAG, "styleURL could not be null");
-        }
-
-        if(options.getString("metadata") == null){
-            Log.d(TAG, "metadata could not be null");
-        }
-
-        if(options.getString("bbox") == null){
-            Log.d(TAG, "bbox could not be null");
-        }
-*/
-        Log.d(TAG, "Name: " + options.getString("name"));
-        Log.d(TAG, "minZoomLevel: " + options.getInt("minZoomLevel"));
-        Log.d(TAG, "maxZoomLevel: " + options.getInt("maxZoomLevel"));
-        Log.d(TAG, "styleURL: " + options.getString("styleURL"));
-        Log.d(TAG, "metadata: " + options.getString("metadata"));
-        Log.d(TAG, "bbox: " + options.getString("bbox"));
-
-/*
-        // Create a bounding box for the offline region
-        LatLngBounds latLngBounds = new LatLngBounds.Builder()
-                .include(new LatLng(37.7897, -119.5073)) // Northeast
-                .include(new LatLng(37.6744, -119.6815)) // Southwest
-                .build();
-
-        // Define the offline region
-        OfflineTilePyramidRegionDefinition definition = new OfflineTilePyramidRegionDefinition(
-                mapView.getStyleUrl(),
-                latLngBounds,
-                10,
-                20,
-                this.getResources().getDisplayMetrics().density);
-
-        offlineManager.createOfflineRegion(definition, metadata, new OfflineManager.CreateOfflineRegionCallback() {
-            ....
-        }*/
-
+        aPackage.getManager().addPackForRegion( aPackage.getManager().getMapView(), options, progressCallback);
 
     }
 
     @ReactMethod
     public void getPacks(int mapRef, Callback callback) {
-
+        aPackage.getManager().getPacks(aPackage.getManager().getMapView());
     }
 
     @ReactMethod
     public void removePack(int mapRef, String packName, Callback callback) {
-
+        aPackage.getManager().removePack(aPackage.getManager().getMapView(), packName);
     }
 
 
@@ -177,7 +122,7 @@ public class ReactNativeMapboxGLModule extends ReactContextBaseJavaModule {
 
     @ReactMethod
     public void setTilt(int mapRef, double pitch) {
-        aPackage.getManager().setTilt(aPackage.getManager().getMapView(), pitch);
+        aPackage.getManager().setTiltFn(aPackage.getManager().getMapboxMap(), pitch);
     }
 
     @ReactMethod
